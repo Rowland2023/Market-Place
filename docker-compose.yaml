@@ -1,0 +1,109 @@
+services:
+  # --- INFRASTRUCTURE: MESSAGE BROKER ---
+  redis:
+    image: redis:7-alpine
+    container_name: market_redis
+    restart: always # Auto-restarts if it crashes
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- INFRASTRUCTURE: HR DATABASE ---
+  mongodb:
+    image: mongo:latest
+    container_name: employee_db
+    restart: always # Keeps DB persistent and active
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s # Increased interval to give it more room on boot
+      timeout: 5s
+      retries: 5
+      start_period: 20s # IMPORTANT: Prevents "unhealthy" status during initial boot
+
+  # --- DJANGO BACKEND (The Orchestrator) ---
+  django_backend:
+    build: ./back-end/store
+    container_name: django_app
+    restart: on-failure # Restarts if the Python process dies
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./back-end/store:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # --- CELERY WORKER (The Async Processor) ---
+  celery_worker:
+    build: ./back-end/store
+    container_name: celery_worker
+    restart: on-failure
+    command: celery -A store worker --loglevel=info
+    volumes:
+      - ./back-end/store:/app
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+      django_backend:
+        condition: service_started
+
+  # --- FASTAPI (Invoice Service) ---
+  invoice_service:
+    build: ./invoice_service
+    container_name: fastapi_invoice
+    restart: on-failure
+    command: uvicorn main:app --host 0.0.0.0 --port 8001
+    volumes:
+      - ./invoice_service:/app
+    ports:
+      - "8001:8001"
+
+  # --- NODE.JS (Employee Service) ---
+  node_employee:
+    build: ./Employee-Management-App
+    container_name: node_employee
+    restart: always # Crucial: If it tries to connect before DB is ready, it re-attempts
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - MONGO_URI=mongodb://mongodb:27017/employee
+    volumes:
+      - ./Employee-Management-App:/app 
+      - /app/node_modules
+    depends_on:
+      mongodb:
+        condition: service_started # Changed from healthy to started to avoid the "wait lock"
+
+  # --- REACT (Frontend) ---
+  frontend:
+    build: 
+      context: ./front-end/expense-manager
+      dockerfile: Dockerfile
+    container_name: react_frontend
+    restart: always
+    volumes:
+      - ./front-end/expense-manager:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    stdin_open: true
+    tty: true
+
+# --- VOLUMES: PERSISTENT STORAGE ---
+volumes:
+  mongo_data:
+    driver: local
