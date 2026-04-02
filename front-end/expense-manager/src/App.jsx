@@ -3,12 +3,16 @@ import "./App.css";
 
 function App() {
   const [products, setProducts] = useState([]);
-  const [category, setCategory] = useState("food"); 
+  const [category, setCategory] = useState("food");
   const [cart, setCart] = useState([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // 1. Fetch products from Django backend
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [orderId, setOrderId] = useState("");
+
   useEffect(() => {
     fetch("http://127.0.0.1:8000/api/products/")
       .then((res) => res.json())
@@ -16,17 +20,26 @@ function App() {
       .catch((err) => console.error("Error fetching products:", err));
   }, []);
 
-  // 2. Filter products by category
-  const filteredProducts = products.filter((p) => p.category === category);
+  const filteredProducts = products.filter((p) => {
+    const matchesCategory = p.category === category;
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   const addToCart = (product) => {
     setCart([...cart, product]);
   };
 
-  // 3. TRANSACTION LOGIC: Now with a built-in delay for database consistency
+  // NEW: Clear Cart Logic
+  const clearCart = () => {
+    if (cart.length === 0) return;
+    if (window.confirm("Are you sure you want to empty your cart?")) {
+      setCart([]);
+    }
+  };
+
   const checkoutOrder = async () => {
     if (cart.length === 0) return alert("Your cart is empty!");
-    
     setIsProcessing(true);
 
     const calculatedTotal = cart.reduce((sum, item) => sum + parseFloat(item.price || 0), 0);
@@ -36,35 +49,25 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: cart.map((item) => ({ 
-            id: parseInt(item.id), 
-            quantity: 1 
-          })),
-          total: calculatedTotal.toFixed(2), 
-          userId: "001", 
+          items: cart.map((item) => ({ id: parseInt(item.id), quantity: 1 })),
+          total: calculatedTotal.toFixed(2),
+          userId: "001",
         }),
       });
 
       const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Server validation failed");
 
-      if (!response.ok) {
-        console.error("Backend Error Details:", data);
-        throw new Error(data.error || "Server validation failed (400)");
-      }
-      
-      // CONFIRMATION
-      alert(`✅ Payment Received!\nOrder ID: ${data.id}\nClick OK to generate your receipt.`);
+      setOrderId(data.id);
+      setIsSuccess(true);
+      setCart([]);
+      setCartOpen(false);
 
-      // FIX: Wait 1.5 seconds before calling FastAPI
-      // This prevents the 404 "Order not found" race condition
       setTimeout(() => {
         window.open(`http://localhost:8001/api/invoices/generate?order_id=${data.id}`, "_blank");
       }, 1500);
 
-      setCart([]);
-      setCartOpen(false);
     } catch (err) {
-      console.error("Checkout Error:", err);
       alert(`Checkout failed: ${err.message}`);
     } finally {
       setIsProcessing(false);
@@ -77,6 +80,14 @@ function App() {
     <div className="app-grid-wrapper">
       <header>
         <h1>Lagos Tech Hub</h1>
+        <div className="search-bar">
+          <input 
+            type="text" 
+            placeholder="Search products..." 
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
         <button className="cart-toggle" onClick={() => setCartOpen(!cartOpen)}>
           🛒 Cart ({cart.length})
         </button>
@@ -84,7 +95,7 @@ function App() {
 
       <nav className="main-nav">
         <ul>
-          <li><a href="#">Home</a></li>
+          <li><a href="#" onClick={() => {setIsSuccess(false); setSelectedProduct(null)}}>Home</a></li>
           <li><a href="#">Shop</a></li>
           <li><a href="#">Account</a></li>
         </ul>
@@ -103,7 +114,12 @@ function App() {
             <button 
               key={cat.id}
               className={category === cat.id ? "active" : ""} 
-              onClick={() => setCategory(cat.id)}
+              onClick={() => {
+                setCategory(cat.id);
+                setSearchTerm("");
+                setSelectedProduct(null);
+                setIsSuccess(false);
+              }}
             >
               {cat.label}
             </button>
@@ -112,25 +128,52 @@ function App() {
       </aside>
 
       <main>
-        <h2>{category.toUpperCase()} SECTION</h2>
-        <div className="product-grid">
-          {filteredProducts.map((p) => (
-            <div key={p.id} className="product-card">
-              <img
-                src={`http://127.0.0.1:8000/static/${p.image_path}`}
-                alt={p.name}
-                style={{ width: '100%', height: '200px', objectFit: 'cover' }}
-                onError={(e) => { e.target.src = "https://via.placeholder.com/150"; }} 
-              />
-              <h3>{p.name}</h3>
-              <p>₦{parseFloat(p.price).toLocaleString()}</p>
-              <button className="add-btn" onClick={() => addToCart(p)}>
-                Add to Cart
-              </button>
+        {isSuccess ? (
+          <div className="view-container success-screen">
+            <h2>✅ Order Confirmed!</h2>
+            <p>Your Order ID is: <strong>#{orderId}</strong></p>
+            <p>Your receipt is generating in a new tab...</p>
+            <button className="back-btn" onClick={() => setIsSuccess(false)}>Continue Shopping</button>
+          </div>
+        ) : selectedProduct ? (
+          <div className="view-container detail-screen">
+            <button className="back-link" onClick={() => setSelectedProduct(null)}>← Back to Grid</button>
+            <div className="detail-layout">
+              <img src={`http://127.0.0.1:8000/static/${selectedProduct.image_path}`} alt={selectedProduct.name} />
+              <div className="detail-info">
+                <h1>{selectedProduct.name}</h1>
+                <p className="detail-price">₦{parseFloat(selectedProduct.price).toLocaleString()}</p>
+                <p>Category: {selectedProduct.category}</p>
+                <button className="add-btn" onClick={() => addToCart(selectedProduct)}>Add to Cart</button>
+              </div>
             </div>
-          ))}
-          {filteredProducts.length === 0 && <p>No items in this category yet.</p>}
-        </div>
+          </div>
+        ) : (
+        <>
+          <h2>{category.toUpperCase()} SECTION</h2>
+          <div className="product-grid">
+            {filteredProducts.map((p) => (
+              <div key={p.id} className="product-card">
+                <div className="img-frame" onClick={() => setSelectedProduct(p)}>
+                  <img
+                    src={`http://127.0.0.1:8000/static/${p.image_path}`}
+                    alt={p.name}
+                    className="zoom-effect"
+                    onError={(e) => { e.target.src = "https://via.placeholder.com/150"; }} 
+                  />
+                  <div className="img-overlay">Click to Expand</div>
+                </div>
+                <h3>{p.name}</h3>
+                <p>₦{parseFloat(p.price).toLocaleString()}</p>
+                <button className="add-btn" onClick={() => addToCart(p)}>
+                  Add to Cart
+                </button>
+              </div>
+            ))}
+            {filteredProducts.length === 0 && <p>No items found.</p>}
+          </div>
+        </>
+        )}
       </main>
 
       <aside className={`right-sidebar ${cartOpen ? "open" : ""}`}>
@@ -151,18 +194,23 @@ function App() {
           <hr />
           <h4>Checkout via:</h4>
           <div className="payment-vendors">
-            <button 
-              className="vendor-btn paystack" 
-              disabled={isProcessing} 
-              onClick={checkoutOrder}
-            >
+            <button className="vendor-btn paystack" disabled={isProcessing} onClick={checkoutOrder}>
               {isProcessing ? "Processing..." : "Paystack"}
+            </button>
+            
+            {/* NEW: Clear Cart Button positioned under Paystack */}
+            <button 
+              className="clear-cart-btn" 
+              onClick={clearCart} 
+              disabled={isProcessing || cart.length === 0}
+            >
+              Clear Cart
             </button>
           </div>
         </div>
       </aside>
 
-      <footer><p>System Status: Operational | v1.0.8</p></footer>
+      <footer><p>System Status: Operational | v1.1.0</p></footer>
     </div>
   );
 }
