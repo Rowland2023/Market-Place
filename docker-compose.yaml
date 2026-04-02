@@ -29,7 +29,7 @@ services:
       start_period: 20s # IMPORTANT: Prevents "unhealthy" status during initial boot
 
   # --- DJANGO BACKEND (The Orchestrator) ---
-  django_backend:
+  django-backend:
     build: ./back-end/store
     container_name: django_app
     restart: on-failure # Restarts if the Python process dies
@@ -57,7 +57,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      django_backend:
+      django-backend:
         condition: service_started
 
   # --- FASTAPI (Invoice Service) ---

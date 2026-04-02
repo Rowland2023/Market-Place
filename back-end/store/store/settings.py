@@ -16,9 +16,26 @@ SECRET_KEY = 'django-insecure-_m6@*&@vaop567))d(y20&&+_ne_$0p%-^e7ap94(gfsw4izjm
 DEBUG = True
 
 # Add 'django_backend' to this list
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'django_backend', '0.0.0.0']
+# settings.py 
 
-# --- Application definition ---
+# 1. Update ALLOWED_HOSTS to include all Docker service names
+ALLOWED_HOSTS = ['*']
+
+USE_X_FORWARDED_HOST = True
+# 2. Add these to the VERY END of the file
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [], # Disables session-based CSRF for internal APIs
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
+}
+
+# 3. Trust the Docker Network Headers
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# 4. Ensure trailing slashes don't cause 400s
+APPEND_SLASH = True
 
 INSTALLED_APPS = [
     'jazzmin',              # CRITICAL: Must be above admin
@@ -100,6 +117,8 @@ CORS_ALLOWED_ORIGINS = [
 
 # Or for internal Docker communication:
 CORS_ALLOW_ALL_ORIGINS = True  # Only do this for development/local testing
+
+APPEND_SLASH = True
 
 # --- Jazzmin Customization Settings ---
 JAZZMIN_SETTINGS = {
