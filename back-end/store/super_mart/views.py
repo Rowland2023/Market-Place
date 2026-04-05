@@ -1,30 +1,73 @@
+from django.contrib.auth.models import User
+from django.contrib.auth import authenticate
 from django.http import JsonResponse
 from rest_framework import viewsets, status
-from rest_framework.decorators import api_view, permission_classes, authentication_classes # Add authentication_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .models import Product, Order, OrderItem, Employee, Payroll
-from .serializers import ProductSerializer
+from .serializers import ProductSerializer, OrderSerializer 
 from .tasks import trigger_invoice_generation 
 
-# --- 1. HRM: EMPLOYEE DATA API ---
+# --- 1. AUTH: REGISTRATION & LOGIN ---
+
+@api_view(['POST'])
+@authentication_classes([]) 
+@permission_classes([AllowAny])
+def register_user(request):
+    data = request.data
+    try:
+        if User.objects.filter(username=data.get('username')).exists():
+            return Response({"error": "Username already taken"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        user = User.objects.create_user(
+            username=data.get('username'),
+            email=data.get('email'),
+            password=data.get('password')
+        )
+        return Response({
+            "message": "User created successfully",
+            "user_id": user.id
+        }, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@authentication_classes([]) 
+@permission_classes([AllowAny])
+def login_user(request):
+    """
+    Verifies credentials and returns user details.
+    """
+    data = request.data
+    username = data.get('username')
+    password = data.get('password')
+    
+    user = authenticate(username=username, password=password)
+    
+    if user is not None:
+        return Response({
+            "message": "Login successful",
+            "user_id": user.id,
+            "email": user.email
+        }, status=status.HTTP_200_OK)
+    else:
+        return Response({"error": "Invalid Email or Password"}, status=status.HTTP_401_UNAUTHORIZED)
+
+# --- 2. HRM: EMPLOYEE DATA API ---
 @api_view(['GET'])
 @authentication_classes([]) 
 @permission_classes([AllowAny]) 
 def employee_detail_api(request, employee_id):
     try:
-        # 1. Try to find the employee by the exact string provided (e.g., "001")
         emp = Employee.objects.filter(employee_id=employee_id).first()
-        
-        # 2. If not found, try stripping leading zeros (e.g., "001" -> "1")
-        if not emp and employee_id.isdigit():
-            emp = Employee.objects.filter(employee_id=employee_id.lstrip('0')).first()
+        if not emp and str(employee_id).isdigit():
+            emp = Employee.objects.filter(employee_id=str(employee_id).lstrip('0')).first()
             
         if not emp:
             return Response({"error": f"Employee {employee_id} not found"}, status=404)
         
-        # 3. Get Salary: Priority to Payroll table, Fallback to Employee model salary
         payroll_entry = Payroll.objects.filter(employee=emp).last()
         salary_amount = str(payroll_entry.amount) if payroll_entry else str(emp.salary)
         
@@ -37,79 +80,77 @@ def employee_detail_api(request, employee_id):
         })
     except Exception as e:
         return Response({"error": str(e)}, status=500)
-# --- 2. MARKETPLACE: CATALOG LOGIC ---
+
+# --- 3. MARKETPLACE: CATALOG ---
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     permission_classes = [AllowAny]
 
-# --- 3. MARKETPLACE: TRANSACTION LOGIC (POST Order) ---
-@api_view(['POST'])
-@authentication_classes([]) # Added to ensure Frontend can post without CSRF issues
+# --- 4. MARKETPLACE: UNIFIED ORDER API ---
+@api_view(['GET', 'POST'])
+@authentication_classes([]) 
 @permission_classes([AllowAny])
-def create_order(request):
-    data = request.data
-    try:
-        new_order = Order.objects.create(
-            user_id=data.get('userId'),
-            total_price=data.get('total'),
-            status='Pending' 
-        )
+def order_list(request):
+    if request.method == 'GET':
+        user_id = request.query_params.get('userId')
+        orders = Order.objects.all().order_by('-id')
+        if user_id:
+            orders = orders.filter(user_id=user_id)
+            
+        serializer = OrderSerializer(orders, many=True)
+        return Response(serializer.data)
 
-        order_items_data = [] 
-        for item in data.get('items', []):
-            product = Product.objects.get(id=item['id'])
-            OrderItem.objects.create(
-                order=new_order,
-                product=product,
-                quantity=item.get('quantity', 1),
-                price_at_purchase=product.price
+    if request.method == 'POST':
+        data = request.data
+        try:
+            new_order = Order.objects.create(
+                user_id=data.get('userId', 'guest_001'),
+                total_price=data.get('total'),
+                status='Pending' 
             )
-            order_items_data.append({
-                "name": product.name,
-                "price": float(product.price),
-                "quantity": item.get('quantity', 1)
-            })
 
-        invoice_payload = {
-            "order_id": new_order.id,
-            "total_amount": float(data.get('total')),
-            "items": order_items_data,
-            "user_id": data.get('userId')
-        }
-        trigger_invoice_generation.delay(invoice_payload)
+            order_items_data = [] 
+            for item in data.get('items', []):
+                product = Product.objects.get(id=item['id'])
+                OrderItem.objects.create(
+                    order=new_order,
+                    product=product,
+                    quantity=item.get('quantity', 1),
+                    price_at_purchase=product.price
+                )
+                order_items_data.append({
+                    "name": product.name,
+                    "price": float(product.price),
+                    "quantity": item.get('quantity', 1)
+                })
 
-        return Response({
-            "status": "Accepted",
-            "message": "Order placed!",
-            "id": new_order.id
-        }, status=status.HTTP_201_CREATED)
+            invoice_payload = {
+                "order_id": new_order.id,
+                "total_amount": float(data.get('total')),
+                "items": order_items_data,
+                "user_id": data.get('userId')
+            }
+            trigger_invoice_generation.delay(invoice_payload)
 
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                "status": "Accepted",
+                "message": "Order placed!",
+                "id": new_order.id
+            }, status=status.HTTP_201_CREATED)
 
-# --- 4. MARKETPLACE: ORDER DETAIL (GET Order for FastAPI) ---
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+# --- 5. MARKETPLACE: ORDER DETAIL ---
 @api_view(['GET'])
-@authentication_classes([]) # CRITICAL: This is the primary fix for the 400 error
+@authentication_classes([]) 
 @permission_classes([AllowAny])
 def get_order_detail(request, order_id):
     try:
         order = Order.objects.get(id=order_id)
         items = OrderItem.objects.filter(order=order)
-        
-        items_list = []
-        for item in items:
-            items_list.append({
-                "product_name": item.product.name,
-                "quantity": item.quantity,
-                "price_at_purchase": str(item.price_at_purchase)
-            })
-
-        return Response({
-            "id": order.id,
-            "total_price": str(order.total_price),
-            "user_id": order.user_id,
-            "items": items_list
-        })
+        items_list = [{"product_name": i.product.name, "quantity": i.quantity, "price": str(i.price_at_purchase)} for i in items]
+        return Response({"id": order.id, "total": str(order.total_price), "user_id": order.user_id, "items": items_list, "status": getattr(order, 'status', 'Processing')})
     except Order.DoesNotExist:
         return Response({"error": "Order not found"}, status=404)

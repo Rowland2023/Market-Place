@@ -9,11 +9,16 @@ class Product(models.Model):
         ('office', 'Office Supplies'),
         ('clothing', 'Clothing & Accessories'),
         ('home', 'Home & Garden'),  
-        ('toys', 'Toys & Games'),
+        ('toys', 'Toys & Games '),
         ('health', 'Health & Beauty'),
         ('sports', 'Sports & Outdoors'),
         ('automotive', 'Automotive'),
         ('books', 'Books & Media'),
+        ('miscKitchen', 'Kitchen & Dining'),
+        ('sex-toys', 'Sex-Toys'),
+        ('rent-house','House-Rent'),
+        ('car-sales','Car-Sales'),
+        ('kitchen-items','Kitchen-Items'),
     ]
     name = models.CharField(max_length=255)
     price = models.DecimalField(max_digits=12, decimal_places=2)
@@ -24,16 +29,29 @@ class Product(models.Model):
     def __str__(self):
         return self.name
 
+
 class Order(models.Model):
-    """Represents the overall transaction sent from React 'checkoutOrder'"""
-    user_id = models.CharField(max_length=100) # e.g., 'demo-user'
+    # Define the professional stages of your order
+    STATUS_CHOICES = [
+        ('Pending', 'Pending'),
+        ('Processing', 'Processing'),
+        ('Shipped', 'Shipped'),
+        ('Delivered', 'Delivered'),
+        ('Cancelled', 'Cancelled'),
+    ]
+
+    user_id = models.CharField(max_length=100)
+    total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    # Add 'choices' here to trigger the dropdown in Admin
+    status = models.CharField(
+        max_length=20, 
+        choices=STATUS_CHOICES, 
+        default='Pending'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
-    total_price = models.DecimalField(max_digits=12, decimal_places=2)
-    status = models.CharField(max_length=20, default='Pending')
 
     def __str__(self):
-        return f"Order {self.id} - {self.user_id}"
-
+        return f"Order {self.id} - {self.status}"
 class OrderItem(models.Model):
     """The 'Through' model linking Products to Orders and tracking historical prices."""
     order = models.ForeignKey(Order, related_name='items', on_delete=models.CASCADE)

@@ -103,11 +103,18 @@ USE_I18N = True
 USE_TZ = True
 
 # --- Static files ---
+# Change this:
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# To this (more flexible):
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'images'), 
+    os.path.join(BASE_DIR, 'static'), # This looks for a folder named 'static' in your root
 ]
+
+# Add Media settings (Good for product uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # --- CORS Settings ---
 CORS_ALLOWED_ORIGINS = [
