@@ -1,27 +1,34 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import Employee, Attendance, Payroll, PerformanceReview, Product
+# Ensure all models are imported correctly
+from .models import Employee, Attendance, Payroll, PerformanceReview, Product, Order, OrderItem
 
 # --- 1. Global Site Branding ---
 admin.site.site_header = "Lagos Tech Hub: Market-Place & HRM"
 admin.site.site_title = "Admin Portal"
 admin.site.index_title = "Command Center"
 
-# --- 2. Product Management (Marketplace Side) ---
+# --- 2. Product Management (Marketplace) ---
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'category', 'price', 'view_product_image')
+    list_display = ('thumbnail', 'name', 'category', 'price', 'view_product_image')
     list_filter = ('category',)
     search_fields = ('name',)
     
+    def thumbnail(self, obj):
+        if obj.image_path:
+            # Assumes path is 'images/sex-toys/toys.jpg'
+            return format_html('<img src="/static/{}" style="width: 50px; height: 50px; border-radius: 4px;" />', obj.image_path)
+        return "No Image"
+    thumbnail.short_description = "Preview"
+
     def view_product_image(self, obj):
-        if hasattr(obj, 'image_path') and obj.image_path:
-             return format_html('<span style="font-family: monospace;">{}</span>', obj.image_path)
+        if obj.image_path:
+             return format_html('<code style="color: #d63384;">{}</code>', obj.image_path)
         return "No Path Set"
     view_product_image.short_description = "Storage Path"
 
-# --- 3. Employee Management (HRM Side) ---
-
+# --- 3. Employee & HRM Management ---
 class AttendanceInline(admin.TabularInline):
     model = Attendance
     extra = 0
@@ -38,22 +45,11 @@ class EmployeeAdmin(admin.ModelAdmin):
     list_display = ('employee_id', 'full_name', 'department', 'position', 'get_status_badge')
     list_filter = ('department', 'is_active', 'position')
     search_fields = ('first_name', 'last_name', 'employee_id')
-    
-    fieldsets = (
-        ('Identity', {
-            'fields': (('first_name', 'last_name'), 'employee_id', 'email')
-        }),
-        ('Professional Details', {
-            'fields': ('department', 'position', 'salary', 'is_active')
-        }),
-    )
-    
     inlines = [AttendanceInline, PayrollInline]
 
     def full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}"
-    full_name.short_description = "Employee Name"
-
+    
     def get_status_badge(self, obj):
         color = "green" if obj.is_active else "red"
         return format_html('<span style="color: {}; font-weight: bold;">{}</span>', 
@@ -61,35 +57,34 @@ class EmployeeAdmin(admin.ModelAdmin):
 
 @admin.register(Attendance)
 class AttendanceAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'date', 'check_in', 'check_out', 'status')
-    list_filter = ('date', 'status', 'employee__department')
-    date_hierarchy = 'date'
+    list_display = ('employee', 'date', 'status')
+    list_filter = ('date', 'status')
 
-@admin.register(PerformanceReview)
-class PerformanceAdmin(admin.ModelAdmin):
-    list_display = ('employee', 'review_date', 'rating', 'reviewer')
-    list_editable = ('rating',)
-    list_filter = ('rating', 'review_date')
-
-# --- 4. Payroll Management (The "Money" Side) ---
 @admin.register(Payroll)
 class PayrollAdmin(admin.ModelAdmin):
     list_display = ('employee', 'pay_period', 'amount', 'is_paid', 'download_payslip')
-    list_filter = ('is_paid', 'pay_period')
-    search_fields = ('employee__last_name', 'pay_period')
-
-    def download_payslip(self, obj):
-        # 1. Ensure the ID is a clean string
-        emp_id = str(obj.employee.employee_id).strip()
-        
-        # 2. Point to LOCALHOST:8001 (Your browser clicks this)
-        fastapi_url = f"http://localhost:8001/api/invoices/generate?user_id={emp_id}"
-        
-        return format_html(
-            '<a class="button" href="{}" target="_blank" '
-            'style="background-color: #447e9b; color: white; padding: 5px 10px; '
-            'border-radius: 4px; text-decoration: none;">Download PDF</a>', 
-            fastapi_url
-        )
     
-    download_payslip.short_description = 'Payslip Action'
+    def download_payslip(self, obj):
+        emp_id = str(obj.employee.employee_id).strip()
+        fastapi_url = f"http://localhost:8001/api/invoices/generate?user_id={emp_id}"
+        return format_html('<a class="button" href="{}" target="_blank" style="background-color: #447e9b; color: white; padding: 5px 5px; border-radius: 4px; text-decoration: none;">PDF</a>', fastapi_url)
+
+# --- 4. Order & Tracking Management ---
+class OrderItemInline(admin.TabularInline):
+    model = OrderItem
+    extra = 0
+    readonly_fields = ('product', 'quantity')
+    can_delete = False
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    # This list_editable line allows you to change status without clicking into the order
+    list_display = ('id', 'user_id', 'total_price', 'status')
+    list_editable = ('status',) 
+    list_filter = ('status',)
+    search_fields = ('id', 'user_id')
+    inlines = [OrderItemInline]
+
+@admin.register(OrderItem)
+class OrderItemAdmin(admin.ModelAdmin):
+    list_display = ('order', 'product', 'quantity')
