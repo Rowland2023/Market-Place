@@ -57,7 +57,7 @@ function App() {
 
   const [user, setUser] = useState(null); 
   const [authMode, setAuthMode] = useState("login"); 
-  const [authData, setAuthData] = useState({ email: "", password: "" });
+  const [authData, setAuthData] = useState({ phone: "", password: "" });
   const [giftCardCode, setGiftCardCode] = useState("");
   const [discount, setDiscount] = useState(0);
 
@@ -114,14 +114,14 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: authData.email,
-          email: authData.email,
+          username: authData.phone,
+          email: `${authData.phone}@lekki-market.com`,
           password: authData.password
         }),
       });
       const data = await response.json();
       if (response.ok) {
-        setUser({ id: data.user_id, email: authData.email });
+        setUser({ id: data.user_id, phone: authData.phone });
         setView("grid");
       } else {
         alert(data.error || "Authentication failed");
@@ -177,7 +177,7 @@ function App() {
 
       const handler = window.PaystackPop.setup({
         key: 'pk_live_21207f639d252b46e35e171dca6b075f79cba433', 
-        email: user ? user.email : 'guest@lekki.com',
+        email: user ? `${user.phone}@lekki-market.com` : 'guest@lekki.com',
         amount: Math.round(totalDue * 100), 
         currency: 'NGN',
         onClose: () => setIsProcessing(false),
@@ -236,7 +236,7 @@ function App() {
           <li><button className="nav-btn-link" onClick={() => setView("account")}>Account</button></li>
           <li className="nav-auth">
             {user ? (
-              <div className="user-badge"><span className="user-welcome">Hi, <strong>{user.email}</strong></span></div>
+              <div className="user-badge"><span className="user-welcome">Hi, <strong>{user.phone}</strong></span></div>
             ) : (
               <button className="register-link" onClick={() => { setView("auth"); setAuthMode("register"); }}>Register / Login</button>
             )}
@@ -263,12 +263,12 @@ function App() {
                <h1>{authMode === "login" ? "Welcome Back" : "Create Account"}</h1>
                <form onSubmit={handleAuth} className="auth-form">
                   <div className="form-group">
-                    <label>Email Address</label>
-                    <input type="email" required value={authData.email} onChange={(e) => setAuthData({...authData, email: e.target.value})} />
+                    <label>Phone Number</label>
+                    <input type="tel" placeholder="Enter your phone number" required value={authData.phone} onChange={(e) => setAuthData({...authData, phone: e.target.value})} />
                   </div>
                   <div className="form-group">
                     <label>Password</label>
-                    <input type="password" required value={authData.password} onChange={(e) => setAuthData({...authData, password: e.target.value})} />
+                    <input type="password" placeholder="Enter your password" required value={authData.password} onChange={(e) => setAuthData({...authData, password: e.target.value})} />
                   </div>
                   <button type="submit" className="auth-submit-btn">{authMode === "login" ? "Login" : "Register"}</button>
                </form>
