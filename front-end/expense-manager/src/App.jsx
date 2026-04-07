@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import "./App.css";
 
 // --- SUB-COMPONENT: PRODUCT CARD ---
-// This keeps the quantity state safe and stable for each product
 function ProductCard({ product, onAddToCart, onSelect }) {
   const [tempQty, setTempQty] = useState(1);
 
@@ -52,6 +51,7 @@ function App() {
   const [view, setView] = useState("grid"); 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [activeImage, setActiveImage] = useState(null); // For Selective Pictures
   const [isSuccess, setIsSuccess] = useState(false);
   const [orderId, setOrderId] = useState("");
 
@@ -134,10 +134,10 @@ function App() {
   const applyGiftCard = () => {
     if (!user) return alert("Please login to redeem gift cards!");
     if (giftCardCode.toUpperCase() === "EOY2026") {
-       setDiscount(5000);
-       alert("₦5,000 Discount Applied!");
+        setDiscount(5000);
+        alert("₦5,000 Discount Applied!");
     } else {
-       alert("Invalid Code.");
+        alert("Invalid Code.");
     }
   };
 
@@ -203,10 +203,9 @@ function App() {
     } catch (err) { alert("Connection failed."); }
   };
 
-  // --- 4. CALCULATIONS ---
+  // --- 4. CALCULATIONS (SHIPPING REMOVED) ---
   const subTotalValue = cart.reduce((sum, item) => sum + (parseFloat(item.price) * item.quantity), 0);
-  const shippingFee = cart.length > 0 ? 1500 : 0;
-  const totalDue = Math.max(0, subTotalValue + shippingFee - discount);
+  const totalDue = Math.max(0, subTotalValue - discount);
 
   const filteredProducts = products.filter((p) => 
     p.category.toLowerCase() === category.toLowerCase() && 
@@ -247,7 +246,7 @@ function App() {
       <aside className="left-sidebar">
         <h3>Categories</h3>
         <nav className="side-nav">
-          {["food", "electronics", "office", "clothing", "sex-toys", "rent-house", "car-sales", "kitchen-items"].map((catId) => (
+          {["food", "electronics", "office", "style&fashion", "sex-toys", "rent-house", "car-sales", "kitchen-items"].map((catId) => (
             <button key={catId} className={category === catId ? "active" : ""} 
               onClick={() => { setCategory(catId); setView("grid"); setSelectedProduct(null); }}>
               {catId.toUpperCase()}
@@ -311,13 +310,46 @@ function App() {
           </div>
         ) : selectedProduct ? (
           <div className="view-container detail-screen">
-            <button onClick={() => setSelectedProduct(null)}>← Back</button>
-            <div className="detail-layout">
-              <img src={`http://127.0.0.1:8000/static/${selectedProduct.image_path}`} alt={selectedProduct.name} style={{ maxWidth: "400px", borderRadius: "12px" }} />
-              <div className="detail-info">
+            <button onClick={() => { setSelectedProduct(null); setActiveImage(null); }}>← Back</button>
+            
+            <div className="detail-layout" style={{ display: 'flex', gap: '30px', marginTop: '20px' }}>
+              {/* LEFT: IMAGE GALLERY */}
+              <div className="image-gallery-container" style={{ flex: 1 }}>
+                <div className="main-image-frame">
+                  <img 
+                    src={`http://127.0.0.1:8000/static/${activeImage || selectedProduct.image_path}`} 
+                    alt={selectedProduct.name} 
+                    style={{ width: "100%", borderRadius: "12px", border: '1px solid #ddd' }} 
+                  />
+                </div>
+                
+                <div className="thumbnail-row" style={{ display: 'flex', gap: '10px', marginTop: '15px', overflowX: 'auto' }}>
+                  {/* Base Image Thumbnail */}
+                  <img 
+                    src={`http://127.0.0.1:8000/static/${selectedProduct.image_path}`}
+                    onClick={() => setActiveImage(selectedProduct.image_path)}
+                    style={{ width: '60px', height: '60px', cursor: 'pointer', borderRadius: '4px', border: activeImage === selectedProduct.image_path ? '2px solid #2e7d32' : '1px solid #ccc' }}
+                  />
+                  {/* Selective Pictures (Additional) */}
+                  {selectedProduct.additional_images?.map((img, idx) => (
+                    <img 
+                      key={idx}
+                      src={`http://127.0.0.1:8000/static/${img.path}`}
+                      onClick={() => setActiveImage(img.path)}
+                      style={{ width: '60px', height: '60px', cursor: 'pointer', borderRadius: '4px', border: activeImage === img.path ? '2px solid #2e7d32' : '1px solid #ccc' }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* RIGHT: PRODUCT INFO */}
+              <div className="detail-info" style={{ flex: 1 }}>
                 <h1>{selectedProduct.name}</h1>
-                <p>₦{parseFloat(selectedProduct.price).toLocaleString()}</p>
-                <button onClick={() => addToCart(selectedProduct)}>Add to Cart</button>
+                <h2 style={{ color: '#2e7d32' }}>₦{parseFloat(selectedProduct.price).toLocaleString()}</h2>
+                <p className="description">{selectedProduct.description || "Premium quality product."}</p>
+                <button className="add-btn" style={{ padding: '15px 30px', fontSize: '1.1rem' }} onClick={() => addToCart(selectedProduct)}>
+                  Add to Cart
+                </button>
               </div>
             </div>
           </div>
