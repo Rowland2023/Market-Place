@@ -7,7 +7,7 @@ class Product(models.Model):
         ('food', 'Food & Drinks'),
         ('electronics', 'Electronics'),
         ('office', 'Office Supplies'),
-        ('clothing', 'Clothing & Accessories'),
+        ('style&fashion', 'Style & Fashion'),
         ('home', 'Home & Garden'),  
         ('toys', 'Toys & Games '),
         ('health', 'Health & Beauty'),
@@ -28,6 +28,14 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
+
+class ProductImage(models.Model):
+    product = models.ForeignKey(Product, related_name='images', on_delete=models.CASCADE)
+    image_path = models.CharField(max_length=255)  # e.g., 'images/products/detail_1.jpg'
+    alt_text = models.CharField(max_length=100, blank=True)
+
+    def __str__(self):
+        return f"Image for {self.product.name}"
 
 
 class Order(models.Model):
