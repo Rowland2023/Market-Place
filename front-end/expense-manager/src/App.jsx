@@ -9,7 +9,7 @@ function ProductCard({ product, onAddToCart, onSelect }) {
     <div className="product-card">
       <div className="img-frame" onClick={() => onSelect(product)}>
         <img 
-          src={`http://127.0.0.1:8000/static/${product.image_path}`} 
+          src={`/static/${product.image_path}`} 
           alt={product.name} 
           className="zoom-effect" 
         />
@@ -51,7 +51,7 @@ function App() {
   const [view, setView] = useState("grid"); 
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [activeImage, setActiveImage] = useState(null); // For Selective Pictures
+  const [activeImage, setActiveImage] = useState(null); 
   const [isSuccess, setIsSuccess] = useState(false);
   const [orderId, setOrderId] = useState("");
 
@@ -65,21 +65,29 @@ function App() {
   const [trackInput, setTrackInput] = useState("");
   const [userOrders, setUserOrders] = useState([]); 
 
+  // --- PAGINATION: SET TO 9 IMAGES PER PAGE ---
+  const PAGE_SIZE = 9; 
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE); 
+
   // --- 2. EFFECTS ---
   useEffect(() => {
     localStorage.setItem("shop_cart_data", JSON.stringify(cart));
   }, [cart]);
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/api/products/")
+    fetch("/api/products/")
       .then((res) => res.json())
       .then((data) => setProducts(data))
       .catch((err) => console.error("Error fetching products:", err));
   }, []);
 
   useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [category, searchTerm]);
+
+  useEffect(() => {
     if (view === "account" && user) {
-      fetch(`http://127.0.0.1:8000/api/orders/?userId=${user.id}`)
+      fetch(`/api/orders/?userId=${user.id}`)
         .then((res) => res.json())
         .then((data) => {
           let ordersArray = Array.isArray(data) ? data : (data.results || []);
@@ -108,7 +116,7 @@ function App() {
 
   const handleAuth = async (e) => {
     e.preventDefault();
-    const url = authMode === "login" ? "http://127.0.0.1:8000/api/login/" : "http://127.0.0.1:8000/api/register/";
+    const url = authMode === "login" ? "/api/login/" : "/api/register/";
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -143,7 +151,7 @@ function App() {
 
   const verifyPaymentOnBackend = async (reference, djangoOrderId) => {
     try {
-      const response = await fetch("http://localhost:8001/api/payments/verify", {
+      const response = await fetch("/api/payments/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reference, order_id: djangoOrderId }),
@@ -152,7 +160,7 @@ function App() {
         setIsSuccess(true);
         setCart([]);
         localStorage.removeItem("shop_cart_data");
-        window.open(`http://localhost:8001/api/invoices/generate?order_id=${djangoOrderId}`, "_blank");
+        window.open(`/api/invoices/generate?order_id=${djangoOrderId}`, "_blank");
       }
     } catch (err) {
       console.error("Verification error", err);
@@ -163,7 +171,7 @@ function App() {
     if (cart.length === 0) return alert("Cart is empty!");
     setIsProcessing(true);
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/orders/", {
+      const response = await fetch("/api/orders/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -196,21 +204,23 @@ function App() {
   const handleTrackOrder = async () => {
     if (!trackInput) return alert("Please enter an Order ID");
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/orders/${trackInput}/`);
+      const response = await fetch(`/api/orders/${trackInput}/`);
       const data = await response.json();
       if (response.ok) setTrackingData(data);
       else alert("Order not found.");
     } catch (err) { alert("Connection failed."); }
   };
 
-  // --- 4. CALCULATIONS (SHIPPING REMOVED) ---
+  // --- 4. CALCULATIONS ---
   const subTotalValue = cart.reduce((sum, item) => sum + (parseFloat(item.price) * item.quantity), 0);
   const totalDue = Math.max(0, subTotalValue - discount);
 
-  const filteredProducts = products.filter((p) => 
+  const allFiltered = products.filter((p) => 
     p.category.toLowerCase() === category.toLowerCase() && 
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const displayedProducts = allFiltered.slice(0, visibleCount);
 
   // --- 5. RENDER ---
   return (
@@ -218,7 +228,7 @@ function App() {
       <header>
         <h1>1-Stop Shop</h1>
         <div className="header-adv-frame">
-          <img src="http://127.0.0.1:8000/static/Shoping-ad.jpg" alt="Advertisement" className="adv-banner" />
+          <img src="/static/Shoping-ad.jpg" alt="Advertisement" className="adv-banner" />
         </div>
         <div className="search-bar">
           <input type="text" placeholder="Search products..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -298,7 +308,7 @@ function App() {
                 <div key={order.id} className="history-item">
                   <strong>Order #{order.id}</strong>
                   <span>₦{parseFloat(order.total_price || 0).toLocaleString()}</span>
-                  <button onClick={() => window.open(`http://localhost:8001/api/invoices/generate?order_id=${order.id}`, "_blank")}>PDF</button>
+                  <button onClick={() => window.open(`/api/invoices/generate?order_id=${order.id}`, "_blank")}>PDF</button>
                 </div>
               ))}
             </div>
@@ -313,36 +323,40 @@ function App() {
             <button onClick={() => { setSelectedProduct(null); setActiveImage(null); }}>← Back</button>
             
             <div className="detail-layout" style={{ display: 'flex', gap: '30px', marginTop: '20px' }}>
-              {/* LEFT: IMAGE GALLERY */}
               <div className="image-gallery-container" style={{ flex: 1 }}>
                 <div className="main-image-frame">
                   <img 
-                    src={`http://127.0.0.1:8000/static/${activeImage || selectedProduct.image_path}`} 
+                    src={`/static/${activeImage || selectedProduct.image_path}`} 
                     alt={selectedProduct.name} 
                     style={{ width: "100%", borderRadius: "12px", border: '1px solid #ddd' }} 
                   />
                 </div>
                 
                 <div className="thumbnail-row" style={{ display: 'flex', gap: '10px', marginTop: '15px', overflowX: 'auto' }}>
-                  {/* Base Image Thumbnail */}
                   <img 
-                    src={`http://127.0.0.1:8000/static/${selectedProduct.image_path}`}
+                    src={`/static/${selectedProduct.image_path}`}
+                    alt="Main view"
                     onClick={() => setActiveImage(selectedProduct.image_path)}
-                    style={{ width: '60px', height: '60px', cursor: 'pointer', borderRadius: '4px', border: activeImage === selectedProduct.image_path ? '2px solid #2e7d32' : '1px solid #ccc' }}
+                    style={{ 
+                      width: '60px', height: '60px', cursor: 'pointer', borderRadius: '4px', 
+                      border: (activeImage === selectedProduct.image_path || !activeImage) ? '2px solid #2e7d32' : '1px solid #ccc' 
+                    }}
                   />
-                  {/* Selective Pictures (Additional) */}
                   {selectedProduct.additional_images?.map((img, idx) => (
                     <img 
                       key={idx}
-                      src={`http://127.0.0.1:8000/static/${img.path}`}
-                      onClick={() => setActiveImage(img.path)}
-                      style={{ width: '60px', height: '60px', cursor: 'pointer', borderRadius: '4px', border: activeImage === img.path ? '2px solid #2e7d32' : '1px solid #ccc' }}
+                      src={`/static/${img.image_path}`}
+                      alt={img.alt_text || `View ${idx + 1}`}
+                      onClick={() => setActiveImage(img.image_path)}
+                      style={{ 
+                        width: '60px', height: '60px', cursor: 'pointer', borderRadius: '4px', 
+                        border: activeImage === img.image_path ? '2px solid #2e7d32' : '1px solid #ccc' 
+                      }}
                     />
                   ))}
                 </div>
               </div>
 
-              {/* RIGHT: PRODUCT INFO */}
               <div className="detail-info" style={{ flex: 1 }}>
                 <h1>{selectedProduct.name}</h1>
                 <h2 style={{ color: '#2e7d32' }}>₦{parseFloat(selectedProduct.price).toLocaleString()}</h2>
@@ -354,10 +368,34 @@ function App() {
             </div>
           </div>
         ) : (
-          <div className="product-grid">
-            {filteredProducts.map((p) => (
-              <ProductCard key={p.id} product={p} onAddToCart={addToCart} onSelect={setSelectedProduct} />
-            ))}
+          <div className="product-list-wrapper">
+            <div className="product-grid">
+              {displayedProducts.map((p) => (
+                <ProductCard key={p.id} product={p} onAddToCart={addToCart} onSelect={setSelectedProduct} />
+              ))}
+            </div>
+
+            {visibleCount < allFiltered.length && (
+              <div className="load-more-container" style={{ textAlign: 'center', margin: '40px 0' }}>
+                <button 
+                  className="see-more-btn"
+                  onClick={() => setVisibleCount(prev => prev + PAGE_SIZE)}
+                  style={{
+                    padding: '12px 40px',
+                    backgroundColor: '#2e7d32',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '25px',
+                    cursor: 'pointer',
+                    fontSize: '1rem',
+                    fontWeight: 'bold',
+                    boxShadow: '0 4px 10px rgba(46, 125, 50, 0.2)'
+                  }}
+                >
+                  See More Products
+                </button>
+              </div>
+            )}
           </div>
         )}
       </main>

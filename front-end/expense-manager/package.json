@@ -1,11 +1,12 @@
 {
   "name": "expense-manager",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "homepage": ".",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build --base=./",
     "lint": "eslint .",
     "preview": "vite preview"
   },
