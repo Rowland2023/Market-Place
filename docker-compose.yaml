@@ -3,7 +3,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: market_redis
-    restart: always # Auto-restarts if it crashes
+    restart: always
     ports:
       - "6379:6379"
     healthcheck:
@@ -16,23 +16,23 @@ services:
   mongodb:
     image: mongo:latest
     container_name: employee_db
-    restart: always # Keeps DB persistent and active
+    restart: always
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s # Increased interval to give it more room on boot
+      interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 20s # IMPORTANT: Prevents "unhealthy" status during initial boot
+      start_period: 20s
 
   # --- DJANGO BACKEND (The Orchestrator) ---
   django-backend:
     build: ./back-end/store
     container_name: django_app
-    restart: on-failure # Restarts if the Python process dies
+    restart: on-failure
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - ./back-end/store:/app
@@ -75,7 +75,7 @@ services:
   node_employee:
     build: ./Employee-Management-App
     container_name: node_employee
-    restart: always # Crucial: If it tries to connect before DB is ready, it re-attempts
+    restart: always
     ports:
       - "3000:3000"
     environment:
@@ -86,22 +86,25 @@ services:
       - /app/node_modules
     depends_on:
       mongodb:
-        condition: service_started # Changed from healthy to started to avoid the "wait lock"
+        condition: service_healthy
 
-  # --- REACT (Frontend) ---
+  # --- REACT (Frontend via Nginx) ---
   frontend:
     build: 
       context: ./front-end/expense-manager
       dockerfile: Dockerfile
     container_name: react_frontend
     restart: always
-    volumes:
-      - ./front-end/expense-manager:/app
-      - /app/node_modules
+    # Note: Volumes are removed here to allow Nginx to serve the built 'dist' folder
+    # contained within the image, preventing conflict with Vite dev mode.
     ports:
-      - "5173:5173"
+      - "80:80"
     stdin_open: true
     tty: true
+    depends_on:
+      - django-backend
+      - invoice_service
+      - node_employee
 
 # --- VOLUMES: PERSISTENT STORAGE ---
 volumes:
